@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define BUF_LEN 4096
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -60,6 +60,9 @@ ETH_DMADescTypeDef DMATxDscrTab[ETH_TX_DESC_CNT] __attribute__((section(".TxDecr
 
 ETH_TxPacketConfig TxConfig;
 
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch2;
 
@@ -67,6 +70,7 @@ ETH_HandleTypeDef heth;
 
 OPAMP_HandleTypeDef hopamp2;
 
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim6;
 
 UART_HandleTypeDef huart3;
@@ -74,7 +78,9 @@ UART_HandleTypeDef huart3;
 PCD_HandleTypeDef hpcd_USB_OTG_FS;
 
 /* USER CODE BEGIN PV */
-
+uint32_t dac_buf[BUF_LEN];
+uint16_t adc_buf[BUF_LEN];
+uint16_t fill_stat = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -87,6 +93,8 @@ static void MX_DAC1_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_ETH_Init(void);
 static void MX_OPAMP2_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -132,21 +140,23 @@ int main(void)
   MX_TIM6_Init();
   MX_ETH_Init();
   MX_OPAMP2_Init();
+  MX_ADC1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
-  uint8_t dac_buf_len = 100;
-  uint32_t dac_buf[100] = {0};
   uint32_t signal_frequency = 480; // 440Hz
   uint32_t output_frequency = 48000; // 48KHz
 
-  for (int i = 0; i < dac_buf_len; i++) {
+  for (int i = 0; i < BUF_LEN; i++) {
 	  dac_buf[i] = 2048 + 2047 * sin(2 * M_PI * signal_frequency / output_frequency * i);
   }
 
   HAL_OPAMP_Start(&hopamp2);
   HAL_TIM_Base_Start(&htim6);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2, (uint32_t*)dac_buf, dac_buf_len, DAC_ALIGN_12B_R);
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2, (uint32_t*)dac_buf, BUF_LEN, DAC_ALIGN_12B_R);
+  HAL_TIM_Base_Start(&htim3);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, BUF_LEN);
 
 
   /* USER CODE END 2 */
@@ -223,6 +233,74 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV2;
+  hadc1.Init.Resolution = ADC_RESOLUTION_16B;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.LowPowerAutoWait = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T3_TRGO;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc1.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR;
+  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
+  hadc1.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure the ADC multi-mode
+  */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc1, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_16;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  sConfig.OffsetSignedSaturation = DISABLE;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -344,6 +422,51 @@ static void MX_OPAMP2_Init(void)
   /* USER CODE BEGIN OPAMP2_Init 2 */
 
   /* USER CODE END OPAMP2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 4999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -482,6 +605,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Stream0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
+  /* DMA1_Stream1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
 
 }
 
@@ -552,7 +678,53 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+// Called when first half of buffer is filled
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
+	fill_stat = 1;
+}
 
+// Called when buffer is completely filled
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	fill_stat = 2;
+}
+//void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
+//  // toggles buffer status pin so sampling rate can be measured
+//  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+//
+//  adc_start = __HAL_TIM_GET_COUNTER(&htim2);
+//
+//  // copies ADC/DMA temp buffer into sample buffer
+//  if (!buff_process){
+//	  buff_process = SET;
+//	  buff_flag_1 = SET;
+//	  buff_flag_2 = RESET;
+//	  for(int j = 0; j < BUF_LEN/2; j++)
+//	  {
+//		  buffer_1[2*j] = (uint16_t)(adc_buf[j]&0x0000FFFF);
+//		  buffer_1[2*j+1] = (uint16_t)(adc_buf[j]>>16);
+//	  }
+//  }
+//}
+//
+//// Called when buffer is completely filled
+//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+//  // toggles buffer status pin so sampling rate can be measured
+//  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+//
+//  adc_end = __HAL_TIM_GET_COUNTER(&htim2);
+//  adc_time = adc_end - adc_start;
+//
+//  // copies ADC/DMA temp buffer into sample buffer
+//  if (!buff_process){
+//	  buff_process = SET;
+//	  buff_flag_2 = SET;
+//	  buff_flag_1 = RESET;
+//	  for(int j = 0; j < BUF_LEN/2; j++) {
+//		  buffer_2[2*j] = (uint16_t)(adc_buf[j+BUF_LEN/2]&0x0000FFFF);
+//		  buffer_2[2*j+1] = (uint16_t)(adc_buf[j+BUF_LEN/2]>>16);
+//	  }
+//  }
+//}
 /* USER CODE END 4 */
 
 /**
