@@ -25,8 +25,6 @@
 /* USER CODE END Includes */
 extern DMA_HandleTypeDef hdma_adc1;
 
-extern DMA_HandleTypeDef hdma_dac1_ch2;
-
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN TD */
 
@@ -201,26 +199,6 @@ void HAL_DAC_MspInit(DAC_HandleTypeDef* hdac)
   /* USER CODE END DAC1_MspInit 0 */
     /* Peripheral clock enable */
     __HAL_RCC_DAC12_CLK_ENABLE();
-
-    /* DAC1 DMA Init */
-    /* DAC1_CH2 Init */
-    hdma_dac1_ch2.Instance = DMA1_Stream0;
-    hdma_dac1_ch2.Init.Request = DMA_REQUEST_DAC2;
-    hdma_dac1_ch2.Init.Direction = DMA_MEMORY_TO_PERIPH;
-    hdma_dac1_ch2.Init.PeriphInc = DMA_PINC_DISABLE;
-    hdma_dac1_ch2.Init.MemInc = DMA_MINC_ENABLE;
-    hdma_dac1_ch2.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-    hdma_dac1_ch2.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
-    hdma_dac1_ch2.Init.Mode = DMA_CIRCULAR;
-    hdma_dac1_ch2.Init.Priority = DMA_PRIORITY_VERY_HIGH;
-    hdma_dac1_ch2.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
-    if (HAL_DMA_Init(&hdma_dac1_ch2) != HAL_OK)
-    {
-      Error_Handler();
-    }
-
-    __HAL_LINKDMA(hdac,DMA_Handle2,hdma_dac1_ch2);
-
   /* USER CODE BEGIN DAC1_MspInit 1 */
 
   /* USER CODE END DAC1_MspInit 1 */
@@ -243,9 +221,6 @@ void HAL_DAC_MspDeInit(DAC_HandleTypeDef* hdac)
   /* USER CODE END DAC1_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_DAC12_CLK_DISABLE();
-
-    /* DAC1 DMA DeInit */
-    HAL_DMA_DeInit(hdac->DMA_Handle2);
   /* USER CODE BEGIN DAC1_MspDeInit 1 */
 
   /* USER CODE END DAC1_MspDeInit 1 */

@@ -64,7 +64,6 @@ ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
 
 DAC_HandleTypeDef hdac1;
-DMA_HandleTypeDef hdma_dac1_ch2;
 
 ETH_HandleTypeDef heth;
 
@@ -80,6 +79,9 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 /* USER CODE BEGIN PV */
 uint32_t dac_buf[BUF_LEN];
 uint16_t adc_buf[BUF_LEN];
+
+uint16_t adc_val;
+uint32_t dac_val;
 uint16_t fill_stat = 0;
 /* USER CODE END PV */
 
@@ -152,11 +154,15 @@ int main(void)
   }
 
   HAL_OPAMP_Start(&hopamp2);
-  HAL_TIM_Base_Start(&htim6);
+//  HAL_TIM_Base_Start(&htim6);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2, (uint32_t*)dac_buf, BUF_LEN, DAC_ALIGN_12B_R);
+//  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2, (uint32_t*)dac_buf, BUF_LEN, DAC_ALIGN_12B_R);
   HAL_TIM_Base_Start(&htim3);
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, BUF_LEN);
+//  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, BUF_LEN);
+
+  HAL_ADC_Start_DMA(&hadc1,(uint32_t*)&adc_val, 1);
+
+
 
 
   /* USER CODE END 2 */
@@ -332,7 +338,7 @@ static void MX_DAC1_Init(void)
   /** DAC channel OUT2 config
   */
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T6_TRGO;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_ENABLE;
   sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
@@ -602,9 +608,6 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
   /* DMA1_Stream1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
@@ -685,46 +688,10 @@ void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	dac_val = (adc_val * 4096) / 65535;
+	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac_val);
 	fill_stat = 2;
 }
-//void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-//  // toggles buffer status pin so sampling rate can be measured
-//  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
-//
-//  adc_start = __HAL_TIM_GET_COUNTER(&htim2);
-//
-//  // copies ADC/DMA temp buffer into sample buffer
-//  if (!buff_process){
-//	  buff_process = SET;
-//	  buff_flag_1 = SET;
-//	  buff_flag_2 = RESET;
-//	  for(int j = 0; j < BUF_LEN/2; j++)
-//	  {
-//		  buffer_1[2*j] = (uint16_t)(adc_buf[j]&0x0000FFFF);
-//		  buffer_1[2*j+1] = (uint16_t)(adc_buf[j]>>16);
-//	  }
-//  }
-//}
-//
-//// Called when buffer is completely filled
-//void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-//  // toggles buffer status pin so sampling rate can be measured
-//  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
-//
-//  adc_end = __HAL_TIM_GET_COUNTER(&htim2);
-//  adc_time = adc_end - adc_start;
-//
-//  // copies ADC/DMA temp buffer into sample buffer
-//  if (!buff_process){
-//	  buff_process = SET;
-//	  buff_flag_2 = SET;
-//	  buff_flag_1 = RESET;
-//	  for(int j = 0; j < BUF_LEN/2; j++) {
-//		  buffer_2[2*j] = (uint16_t)(adc_buf[j+BUF_LEN/2]&0x0000FFFF);
-//		  buffer_2[2*j+1] = (uint16_t)(adc_buf[j+BUF_LEN/2]>>16);
-//	  }
-//  }
-//}
 /* USER CODE END 4 */
 
 /**
