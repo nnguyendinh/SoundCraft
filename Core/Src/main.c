@@ -19,6 +19,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "string.h"
+#include <math.h>
+#include <stdlib.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -83,6 +85,8 @@ uint16_t adc_buf[BUF_LEN];
 uint16_t adc_val;
 uint32_t dac_val;
 uint16_t fill_stat = 0;
+
+uint16_t state = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -681,16 +685,126 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-// Called when first half of buffer is filled
-void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc) {
-	fill_stat = 1;
+
+#define ADC_MAX 65535
+#define DAC_MAX 4096
+#define SAMPLE_RATE 48000
+
+#define BUFFER_SIZE 1000
+
+int t_count = 0; // for tremolo
+
+uint16_t buffer[BUFFER_SIZE] = {0};
+int read_pointer = 0, write_pointer = 0, opp_pointer;
+float float_read_pointer = 0.0;
+float pitch_factor = 1.2;
+
+#define MAX_DELAY_SAMPLES SAMPLE_RATE  // Maximum delay (1-second delay)
+int16_t delay_buffer[MAX_DELAY_SAMPLES] = {0};  // Static delay buffer to avoid dynamic allocation
+uint32_t delay_index = 0;
+float echo_factor = 0.3;
+
+
+// Function to apply distortion to the audio samples
+void distort(uint16_t *input, uint32_t bound) {
+
+    if (*input > (ADC_MAX/2 + bound)) {
+        *input = ADC_MAX/2 + bound;
+    } else if (*input < (ADC_MAX/2 - bound)) {
+        *input = ADC_MAX/2 - bound;
+    }
+
 }
+
+// Function to apply tremolo effect
+void tremolo(uint16_t *input, int index, float depth, float mod_freq) {
+
+    *input *= ((1-depth) + depth * sin(2 * M_PI * mod_freq * index / SAMPLE_RATE));
+
+}
+
+// Function to apply pitch shifting
+void pitch_shift(uint16_t *input, float pitch_factor) {
+
+	buffer[write_pointer] = *input;
+	write_pointer = (write_pointer + 1) % BUFFER_SIZE;
+
+    float_read_pointer += pitch_factor;
+    if (float_read_pointer > BUFFER_SIZE) {
+        float_read_pointer -= BUFFER_SIZE;
+    }
+
+    read_pointer = ((int)float_read_pointer) % BUFFER_SIZE;
+    opp_pointer = (read_pointer + (BUFFER_SIZE / 2)) % BUFFER_SIZE;
+
+    if (abs(read_pointer - write_pointer) < pitch_factor) {
+        read_pointer = opp_pointer;
+        float_read_pointer = (float)opp_pointer;
+    }
+
+    *input = buffer[read_pointer];
+
+}
+
+// Function to apply an echo effect without dynamic allocation or double casting
+void echo(uint16_t *input, float feedback) {
+
+	// Multiply the previous delayed sample by the feedback factor in fixed-point (Q15 format)
+	int16_t delayed_sample = (delay_buffer[delay_index] / 2);
+
+	*input = *input;
+
+
+	// Store the current input sample into the delay buffer
+	delay_buffer[delay_index] = *input;
+
+	// Add the delayed sample to the current input, with feedback
+	*input += delayed_sample;
+
+	// Update the delay buffer index (circular buffer)
+	delay_index = (delay_index + 1) % SAMPLE_RATE;  // Wrap around every 1 second (SAMPLE_RATE samples)
+}
+
 
 // Called when buffer is completely filled
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
-	dac_val = (adc_val * 4096) / 65535;
-	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac_val);
-	fill_stat = 2;
+
+//	if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin)) {
+//		state = 1;
+//	}
+//
+//	else {
+//		state = 0;
+//	}
+
+    if (state == 1)
+    {
+        distort(&adc_val, 0.15*ADC_MAX); // [0, 0.5*ADC_MAX] larger bound means less distortion
+    }
+
+    else if (state == 2)
+    {
+        tremolo(&adc_val, t_count, 0.5, 5); // [0, 1] depth, [0, 10] mod_freq
+        t_count++;
+    }
+
+    // Apply pitch shifting if enabled
+    else if (state == 3)
+    {
+        pitch_shift(&adc_val, pitch_factor);
+    }
+
+    // echo
+    else if (state == 4)
+    {
+    	echo(&adc_val, echo_factor);
+    }
+
+    dac_val = (adc_val * DAC_MAX) / ADC_MAX;
+    HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac_val);
+    fill_stat = 2;
+
+
 }
 /* USER CODE END 4 */
 
